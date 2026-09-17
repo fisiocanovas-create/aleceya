@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="FisioPilates">
+  <title>Gestión Pilates & Liquidación</title>
+  
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230f766e'/><text x='50%' y='55%' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='50' font-family='sans-serif'>P</text></svg>">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="h-full text-slate-800 antialiased flex flex-col select-none">
+
+  <!-- Header -->
+  <header class="bg-teal-800 text-white pt-10 pb-4 px-4 shadow-md sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold tracking-tight">Gestión Pilates Reformer</h1>
+        <p class="text-xs text-teal-200">Daniel Cánovas García · Fisioterapia</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="monthSelect" class="bg-teal-900 border border-teal-700 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-400 text-teal-100">
+          <option value="2026-01">Enero 2026</option>
+          <option value="2026-02" selected>Febrero 2026</option>
+          <option value="2026-03">Marzo 2026</option>
+        </select>
+        <button onclick="exportInvoicePDF()" class="bg-teal-600 hover:bg-teal-500 active:scale-95 transition text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm">
+          <span>Factura PDF</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 overflow-y-auto p-4 max-w-5xl mx-auto w-full space-y-4 pb-24">
+    
+    <!-- KPI Summary Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Cobrado Total</p>
+        <p id="totalBilled" class="text-xl font-black text-slate-800 mt-1">0,00 €</p>
+        <p id="paidCount" class="text-[10px] text-teal-600 mt-0.5">0 cobros registrados</p>
+      </div>
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Base (60%)</p>
+        <p id="baseAmount" class="text-xl font-black text-teal-700 mt-1">0,00 €</p>
+        <p class="text-[10px] text-slate-400 mt-0.5">Liquidación Clínica</p>
+      </div>
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">IRPF (15%)</p>
+        <p id="irpfAmount" class="text-xl font-black text-amber-600 mt-1">- 0,00 €</p>
+        <p class="text-[10px] text-slate-400 mt-0.5">Retención fiscal</p>
+      </div>
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Líquido a Percibir</p>
+        <p id="netAmount" class="text-xl font-black text-emerald-600 mt-1">0,00 €</p>
+        <p class="text-[10px] text-emerald-600 mt-0.5">Neto a transferir</p>
+      </div>
+    </div>
+
+    <!-- Actions & Filter Bar -->
+    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-2 justify-between items-center">
+      <div class="flex gap-2 w-full md:w-auto">
+        <input type="text" id="searchInput" placeholder="Buscar paciente..." oninput="renderTable()" class="text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-teal-600">
+        <select id="filterStatus" onchange="renderTable()" class="text-sm bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          <option value="all">Todos</option>
+          <option value="paid">Cobrados</option>
+          <option value="pending">Pendientes</option>
+        </select>
+      </div>
+      <div class="flex gap-2 w-full md:w-auto justify-end">
+        <button onclick="openModal()" class="w-full md:w-auto bg-slate-900 text-white active:scale-95 text-xs font-semibold px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 shadow-sm">
+          <span>+ Añadir Alumno</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Student List Table -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 bg-slate-50/75 text-slate-500 font-semibold uppercase tracking-wider">
+              <th class="py-3 px-3">Paciente</th>
+              <th class="py-3 px-3">Horario</th>
+              <th class="py-3 px-3 text-center">Sesiones</th>
+              <th class="py-3 px-3">Tarifa</th>
+              <th class="py-3 px-3 text-center">Estado</th>
+              <th class="py-3 px-3 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="studentTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+            <!-- Dynamic Injection -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Add/Edit Modal -->
+  <div id="patientModal" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-2xl p-5 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h3 id="modalTitle" class="font-bold text-slate-800 text-base">Añadir Alumno Pilates</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-lg leading-none">&times;</button>
+      </div>
+      <form id="patientForm" onsubmit="savePatient(event)" class="space-y-3 text-xs">
+        <input type="hidden" id="editIndex">
+        <div>
+          <label class="block font-semibold text-slate-600 mb-1">Nombre y Apellidos</label>
+          <input type="text" id="formName" required class="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Grupo / Horario</label>
+            <input type="text" id="formSchedule" placeholder="Ej: L-X 09:30" class="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Sesiones Asistidas</label>
+            <input type="number" id="formSessions" min="0" value="8" class="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Tarifa / Importe (€)</label>
+            <input type="number" step="0.5" id="formFee" required value="50" class="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 mb-1">Forma de Pago</label>
+            <select id="formPaymentMethod" class="w-full border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-600">
+              <option value="Efectivo">Efectivo</option>
+              <option value="Bizum">Bizum</option>
+              <option value="Transferencia">Transferencia</option>
+              <option value="Tarjeta">Tarjeta</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="formPaid" class="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500">
+          <label for="formPaid" class="font-semibold text-slate-700">Marcar como cobrado</label>
+        </div>
+        <div class="pt-2 flex gap-2">
+          <button type="button" onclick="closeModal()" class="w-1/2 py-2.5 rounded-lg border border-slate-200 font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+          <button type="submit" class="w-1/2 py-2.5 rounded-lg bg-teal-700 text-white font-semibold hover:bg-teal-800 shadow-sm">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const FISCAL_EMISOR = {
+      nombre: "Daniel Cánovas García",
+      nif: "48656487X",
+      direccion: "Murcia, CP: 30007"
+    };
+
+    const FISCAL_RECEPTOR = {
+      nombre: "María Teresa Ortega Manzanera",
+      nif: "48392709L",
+      direccion: "Murcia"
+    };
+
+    // Dataset inicial extraído de las hojas de Enero/Febrero
+    const initialRecords = {
+      "2026-02": [
+        { name: "Carmen Cánovas", schedule: "L-X 09:30", sessions: 8, fee: 50.0, paid: true, method: "Bizum" },
+        { name: "Encarna Martínez", schedule: "L-X 09:30", sessions: 8, fee: 50.0, paid: true, method: "Efectivo" },
+        { name: "María José Gallego", schedule: "L-X 10:30", sessions: 7, fee: 50.0, paid: true, method: "Transferencia" },
+        { name: "Pedro Antonio Sánchez", schedule: "M-J 18:00", sessions: 8, fee: 55.0, paid: true, method: "Efectivo" },
+        { name: "Isabel María Rocamora", schedule: "M-J 18:00", sessions: 8, fee: 50.0, paid: false, method: "Efectivo" },
+        { name: "Ana Belén Alarcón", schedule: "M-J 19:00", sessions: 8, fee: 50.0, paid: true, method: "Bizum" },
+        { name: "Francisco Javier Ruiz", schedule: "V 10:00", sessions: 4, fee: 35.0, paid: false, method: "Efectivo" }
+      ],
+      "2026-01": [
+        { name: "Carmen Cánovas", schedule: "L-X 09:30", sessions: 8, fee: 50.0, paid: true, method: "Bizum" },
+        { name: "Encarna Martínez", schedule: "L-X 09:30", sessions: 8, fee: 50.0, paid: true, method: "Efectivo" },
+        { name: "María José Gallego", schedule: "L-X 10:30", sessions: 8, fee: 50.0, paid: true, method: "Transferencia" },
+        { name: "Pedro Antonio Sánchez", schedule: "M-J 18:00", sessions: 7, fee: 55.0, paid: true, method: "Efectivo" }
+      ]
+    };
+
+    let currentMonth = document.getElementById('monthSelect').value;
+    let data = JSON.parse(localStorage.getItem('fisio_pilates_data')) || initialRecords;
+
+    function persist() {
+      localStorage.setItem('fisio_pilates_data', JSON.stringify(data));
+      renderTable();
+    }
+
+    document.getElementById('monthSelect').addEventListener('change', (e) => {
+      currentMonth = e.target.value;
+      if (!data[currentMonth]) data[currentMonth] = [];
+      renderTable();
+    });
+
+    function getMonthList() {
+      return data[currentMonth] || [];
+    }
+
+    function togglePaid(index) {
+      const list = getMonthList();
+      list[index].paid = !list[index].paid;
+      persist();
+    }
+
+    function deletePatient(index) {
+      if (confirm("¿Eliminar este registro?")) {
+        data[currentMonth].splice(index, 1);
+        persist();
+      }
+    }
+
+    function openModal(editIdx = null) {
+      const modal = document.getElementById('patientModal');
+      const form = document.getElementById('patientForm');
+      form.reset();
+      
+      if (editIdx !== null) {
+        const item = getMonthList()[editIdx];
+        document.getElementById('modalTitle').innerText = "Editar Alumno";
+        document.getElementById('editIndex').value = editIdx;
+        document.getElementById('formName').value = item.name;
+        document.getElementById('formSchedule').value = item.schedule;
+        document.getElementById('formSessions').value = item.sessions;
+        document.getElementById('formFee').value = item.fee;
+        document.getElementById('formPaymentMethod').value = item.method;
+        document.getElementById('formPaid').checked = item.paid;
+      } else {
+        document.getElementById('modalTitle').innerText = "Añadir Alumno";
+        document.getElementById('editIndex').value = "";
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('patientModal').classList.add('hidden');
+    }
+
+    function savePatient(e) {
+      e.preventDefault();
+      const idx = document.getElementById('editIndex').value;
+      const record = {
+        name: document.getElementById('formName').value,
+        schedule: document.getElementById('formSchedule').value || 'Sin horario',
+        sessions: parseInt(document.getElementById('formSessions').value, 10) || 0,
+        fee: parseFloat(document.getElementById('formFee').value) || 0,
+        method: document.getElementById('formPaymentMethod').value,
+        paid: document.getElementById('formPaid').checked
+      };
+
+      if (!data[currentMonth]) data[currentMonth] = [];
+
+      if (idx !== "") {
+        data[currentMonth][idx] = record;
+      } else {
+        data[currentMonth].push(record);
+      }
+      closeModal();
+      persist();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('studentTableBody');
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const status = document.getElementById('filterStatus').value;
+      const list = getMonthList();
+
+      tbody.innerHTML = '';
+
+      let totalCollected = 0;
+      let countPaid = 0;
+
+      list.forEach((item, index) => {
+        if (item.paid) {
+          totalCollected += item.fee;
+          countPaid++;
+        }
+
+        // Filters
+        if (status === 'paid' && !item.paid) return;
+        if (status === 'pending' && item.paid) return;
+        if (search && !item.name.toLowerCase().includes(search) && !item.schedule.toLowerCase().includes(search)) return;
+
+        const row = document.createElement('tr');
+        row.className = "hover:bg-slate-50 transition border-b border-slate-100";
+        row.innerHTML = `
+          <td class="py-3 px-3">
+            <div class="font-bold text-slate-800">${item.name}</div>
+            <div class="text-[10px] text-slate-400 font-normal">${item.method}</div>
+          </td>
+          <td class="py-3 px-3 font-medium text-slate-600">${item.schedule}</td>
+          <td class="py-3 px-3 text-center">
+            <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">${item.sessions}</span>
+          </td>
+          <td class="py-3 px-3 font-bold text-slate-700">${item.fee.toFixed(2)} €</td>
+          <td class="py-3 px-3 text-center">
+            <button onclick="togglePaid(${index})" class="text-[10px] uppercase font-bold px-2.5 py-1 rounded-full cursor-pointer transition ${
+              item.paid ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+            }">
+              ${item.paid ? 'Cobrado' : 'Pendiente'}
+            </button>
+          </td>
+          <td class="py-3 px-3 text-right space-x-1">
+            <button onclick="openModal(${index})" class="text-teal-700 hover:text-teal-900 font-bold p-1">Editar</button>
+            <button onclick="deletePatient(${index})" class="text-rose-500 hover:text-rose-700 font-bold p-1">Borrar</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+
+      // Recalcular métricas de liquidación clínica
+      const baseClínica = totalCollected * 0.60;
+      const irpf = baseClínica * 0.15;
+      const liquido = baseClínica - irpf;
+
+      document.getElementById('totalBilled').innerText = `${totalCollected.toFixed(2)} €`;
+      document.getElementById('paidCount').innerText = `${countPaid} cobros computados`;
+      document.getElementById('baseAmount').innerText = `${baseClínica.toFixed(2)} €`;
+      document.getElementById('irpfAmount').innerText = `- ${irpf.toFixed(2)} €`;
+      document.getElementById('netAmount').innerText = `${liquido.toFixed(2)} €`;
+    }
+
+    function exportInvoicePDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      const list = getMonthList().filter(i => i.paid);
+      const totalCobrado = list.reduce((acc, curr) => acc + curr.fee, 0);
+      const base = totalCobrado * 0.60;
+      const irpf = base * 0.15;
+      const liquido = base - irpf;
+      const monthLabel = document.getElementById('monthSelect').selectedOptions[0].text;
+
+      // Encabezado Fiscal Emisor
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(FISCAL_EMISOR.nombre, 14, 20);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(`NIF: ${FISCAL_EMISOR.nif}`, 14, 25);
+      doc.text(FISCAL_EMISOR.direccion, 14, 29);
+      doc.text("Fisioterapeuta Colegiado", 14, 33);
+
+      // Receptor
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Destinatario (Cliente):", 120, 20);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(FISCAL_RECEPTOR.nombre, 120, 25);
+      doc.text(`NIF: ${FISCAL_RECEPTOR.nif}`, 120, 29);
+      doc.text(FISCAL_RECEPTOR.direccion, 120, 33);
+
+      doc.setLineWidth(0.3);
+      doc.line(14, 38, 196, 38);
+
+      // Metadatos Factura
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(`LIQUIDACIÓN SERVICIOS FISIOTERAPIA / PILATES`, 14, 46);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Periodo: ${monthLabel}`, 14, 51);
+      doc.text(`Fecha Emisión: ${new Date().toLocaleDateString('es-ES')}`, 14, 56);
+
+      // Tabla de desglose
+      const tableData = [
+        [
+          `Servicios Fisioterapia / Pilates Reformer (${monthLabel})\nBase liquidación convenida clínica (60% sobre ${totalCobrado.toFixed(2)} € cobrados)`,
+          `${base.toFixed(2)} €`
+        ]
+      ];
+
+      doc.autoTable({
+        startY: 62,
+        head: [['Concepto', 'Base Imponible']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: { fillColor: [15, 118, 110] },
+        columnStyles: {
+          0: { cellWidth: 140 },
+          1: { cellWidth: 40, halign: 'right' }
+        }
+      });
+
+      const finalY = doc.lastAutoTable.finalY + 8;
+
+      // Resumen Fiscal
+      doc.setFontSize(9);
+      doc.text(`Base Imponible:`, 130, finalY);
+      doc.text(`${base.toFixed(2)} €`, 195, finalY, { align: 'right' });
+
+      doc.text(`IVA (0% - Exento Art. 20 Ley 37/1992):`, 130, finalY + 6);
+      doc.text(`0,00 €`, 195, finalY + 6, { align: 'right' });
+
+      doc.text(`Retención IRPF (-15%):`, 130, finalY + 12);
+      doc.text(`- ${irpf.toFixed(2)} €`, 195, finalY + 12, { align: 'right' });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(`TOTAL LÍQUIDO:`, 130, finalY + 20);
+      doc.text(`${liquido.toFixed(2)} €`, 195, finalY + 20, { align: 'right' });
+
+      // Pie legal
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.text("Operación exenta de IVA en virtud del Artículo 20, Apartado Uno, Número 3º de la Ley 37/1992.", 14, 280);
+
+      if (navigator.share && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        const pdfBlob = doc.output('blob');
+        const file = new File([pdfBlob], `Liquidacion_Pilates_${currentMonth}.pdf`, { type: 'application/pdf' });
+        navigator.share({
+          files: [file],
+          title: `Liquidación Pilates ${monthLabel}`,
+          text: `Resumen de liquidación clínica correspondiente a ${monthLabel}.`
+        }).catch(() => doc.save(`Liquidacion_Pilates_${currentMonth}.pdf`));
+      } else {
+        doc.save(`Liquidacion_Pilates_${currentMonth}.pdf`);
+      }
+    }
+
+    // Init
+    renderTable();
+  </script>
+</body>
+</html>
